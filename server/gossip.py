@@ -24,9 +24,13 @@ class GossipSocket(threading.Thread):
         self.port = int(port)
         self.host = host
         self.nodes = []
-        self.s = socket.socket()
+        self.si = self.create_socket_instance()
+        self.so = self.create_socket_instance()
         self.outf = 'test' + self.name
         self.queue = {}
+
+    def create_socket_instance(self):
+        return socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 
 
@@ -48,7 +52,11 @@ class GossipSocket(threading.Thread):
                         sock_data = sock.getpeername()
                         print(sock_data, addr)
                         self.nodes.append(sock_data)
-                        self.s.sendto('test', sock_data)
+                        print(sock_data)
+                        # time.delay(3)
+                        # self.so.connect(sock_data)
+                        sock.send('add_nodes ' + json.dumps(self.nodes))
+                        # self.so.sendto('test', sock_data)
                         sock, addr = self.accept()
                     else:
                         print()
@@ -63,9 +71,9 @@ class GossipSocket(threading.Thread):
         self.log('thread_started')
         try:
             print(self.host, self.port)
-            self.s.bind((self.host, self.port))
+            self.si.bind((self.host, self.port))
             self.log('successfully binded')
-            self.s.listen(5)
+            self.si.listen(5)
             self.log('add 5 listeners')
             th = threading.Thread(name='th1', target=self.conn_accept)
             th.start()
@@ -75,7 +83,7 @@ class GossipSocket(threading.Thread):
 
     def accept(self):
         self.log('accept connection')
-        return self.s.accept()
+        return self.si.accept()
 
 
 
@@ -84,17 +92,42 @@ class GossipSocket(threading.Thread):
         print(gossip_socket)
         self.nodes.append(gossip_socket)
 
+    def parse_command(self, res):
+        d = res.split(' ')
+        c = d[0]
+        data_array = ' '.join(d[1::])
+        if (c == 'add_nodes'):
+            self.parse_nodes_list(data_array)
+
+    def parse_nodes_list(self, nodes_list=[]):
+        d = json.loads(nodes_list)
+        print(d)
+        for i in d:
+            self.add_node((i[0], i[1]))
+        # for i in nodes_list:
+        #     print(i)
+        #     d = json.loads(i)
+        #     print(d)
+        #     for j in d:
+        #         print(j)
+
     def add_master(self, port):
+        self.so.bind((self.host, self.port))
         self.connect(port)
         self.nodes.append(port)
-        self.s.send('add_to_list')
+        self.so.send('add_to_list')
         self.log('master added')
-        self.s.close()
-        self.s = socket.socket()
+        b = self.so.recv(1024)
+        # print(b)
+        self.parse_command(b)
+        self.so.close()
+        self.so = self.create_socket_instance()
+        # self.so.bind((self.host, self.port))
+
 
 
     def connect(self, port):
-        self.s.connect(('localhost', int(port)))
+        self.so.connect(('localhost', int(port)))
 
     def send(self, data):
         print(data)
@@ -102,4 +135,4 @@ class GossipSocket(threading.Thread):
         if (self.nodes.__len__() != 0):
             node = self.nodes[random.randint(0, len(self.nodes) - 1)]
             self.connect(node.port)
-        self.s.send(data.encode('utf-8'))
+        self.so.send(data.encode('utf-8'))
